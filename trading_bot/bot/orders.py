@@ -1,6 +1,5 @@
 """Order management and execution logic"""
 
-import logging
 from typing import Dict, Any, Optional
 from .client import BinanceFuturesTestnetClient
 from .validators import (
@@ -99,7 +98,7 @@ class OrderService:
             params['price'] = order.price
             params['timeInForce'] = 'GTC'  # Good Till Cancel
         
-        if order.order_type == "STOP_LIMIT":
+        if order.order_type == "STOP":
             params['price'] = order.price
             params['stopPrice'] = order.stop_price
             params['timeInForce'] = 'GTC'
