@@ -1,162 +1,89 @@
-"""Input validation for trading bot"""
+"""Input validation helpers for order requests.
 
-import logging
-from typing import Optional
-from decimal import Decimal, InvalidOperation
+Kept separate from the CLI and the API client so validation rules can be
+unit-tested in isolation and reused if a different front-end (e.g. a UI)
+is added later.
+"""
+import re
 
-logger = logging.getLogger("trading_bot")
+VALID_SIDES = {"BUY", "SELL"}
+VALID_ORDER_TYPES = {"MARKET", "LIMIT", "STOP_LIMIT"}
+SYMBOL_PATTERN = re.compile(r"^[A-Z0-9]{5,20}$")
 
 
-class ValidationError(Exception):
-    """Custom exception for validation errors"""
-    pass
+class ValidationError(ValueError):
+    """Raised when CLI input fails validation."""
 
 
-class InputValidator:
-    """Validates user input for trading orders"""
-    
-    VALID_SIDES = ["BUY", "SELL"]
-    VALID_ORDER_TYPES = ["MARKET", "LIMIT"]
-    
-    @staticmethod
-    def validate_symbol(symbol: str) -> str:
-        """
-        Validate trading symbol format.
-        
-        Args:
-            symbol: Trading pair symbol (e.g., BTCUSDT)
-            
-        Returns:
-            Validated symbol in uppercase
-            
-        Raises:
-            ValidationError: If symbol is invalid
-        """
-        if not symbol:
-            raise ValidationError("Symbol cannot be empty")
-        
-        symbol = symbol.upper().strip()
-        
-        if len(symbol) < 6:
-            raise ValidationError(f"Symbol '{symbol}' is too short (minimum 6 characters)")
-        
-        if not symbol.isalnum():
-            raise ValidationError(f"Symbol '{symbol}' contains invalid characters")
-        
-        logger.debug(f"Symbol validated: {symbol}")
-        return symbol
-    
-    @staticmethod
-    def validate_side(side: str) -> str:
-        """
-        Validate order side (BUY/SELL).
-        
-        Args:
-            side: Order side
-            
-        Returns:
-            Validated side in uppercase
-            
-        Raises:
-            ValidationError: If side is invalid
-        """
-        if not side:
-            raise ValidationError("Side cannot be empty")
-        
-        side = side.upper().strip()
-        
-        if side not in InputValidator.VALID_SIDES:
-            raise ValidationError(
-                f"Invalid side '{side}'. Must be one of: {', '.join(InputValidator.VALID_SIDES)}"
-            )
-        
-        logger.debug(f"Side validated: {side}")
-        return side
-    
-    @staticmethod
-    def validate_order_type(order_type: str) -> str:
-        """
-        Validate order type (MARKET/LIMIT).
-        
-        Args:
-            order_type: Order type
-            
-        Returns:
-            Validated order type in uppercase
-            
-        Raises:
-            ValidationError: If order type is invalid
-        """
-        if not order_type:
-            raise ValidationError("Order type cannot be empty")
-        
-        order_type = order_type.upper().strip()
-        
-        if order_type not in InputValidator.VALID_ORDER_TYPES:
-            raise ValidationError(
-                f"Invalid order type '{order_type}'. Must be one of: {', '.join(InputValidator.VALID_ORDER_TYPES)}"
-            )
-        
-        logger.debug(f"Order type validated: {order_type}")
-        return order_type
-    
-    @staticmethod
-    def validate_quantity(quantity: str) -> Decimal:
-        """
-        Validate order quantity.
-        
-        Args:
-            quantity: Order quantity as string
-            
-        Returns:
-            Validated quantity as Decimal
-            
-        Raises:
-            ValidationError: If quantity is invalid
-        """
-        if not quantity:
-            raise ValidationError("Quantity cannot be empty")
-        
-        try:
-            qty = Decimal(quantity.strip())
-        except InvalidOperation:
-            raise ValidationError(f"Quantity '{quantity}' is not a valid number")
-        
-        if qty <= 0:
-            raise ValidationError(f"Quantity must be greater than 0, got {qty}")
-        
-        logger.debug(f"Quantity validated: {qty}")
-        return qty
-    
-    @staticmethod
-    def validate_price(price: Optional[str], order_type: str) -> Optional[Decimal]:
-        """
-        Validate order price.
-        
-        Args:
-            price: Order price as string (required for LIMIT orders)
-            order_type: Order type (MARKET/LIMIT)
-            
-        Returns:
-            price_decimal for LIMIT or None for MARKET
-            
-        Raises:
-            ValidationError: If price validation fails
-        """
-        if order_type == "MARKET":
-            logger.debug("MARKET order - price not required")
-            return None
-        
-        if not price:
-            raise ValidationError("Price is required for LIMIT orders")
-        
-        try:
-            price_decimal = Decimal(price.strip())
-        except InvalidOperation:
-            raise ValidationError(f"Price '{price}' is not a valid number")
-        
-        if price_decimal <= 0:
-            raise ValidationError(f"Price must be greater than 0, got {price_decimal}")
-        
-        logger.debug(f"Price validated: {price_decimal}")
-        return price_decimal
+def validate_symbol(symbol: str) -> str:
+    if symbol is None:
+        raise ValidationError("Symbol is required.")
+    symbol = symbol.strip().upper()
+    if not SYMBOL_PATTERN.match(symbol):
+        raise ValidationError(
+            f"Invalid symbol '{symbol}'. Expected a format like 'BTCUSDT'."
+        )
+    return symbol
+
+
+def validate_side(side: str) -> str:
+    if side is None:
+        raise ValidationError("Side is required.")
+    side = side.strip().upper()
+    if side not in VALID_SIDES:
+        raise ValidationError(f"Invalid side '{side}'. Must be one of {sorted(VALID_SIDES)}.")
+    return side
+
+
+def validate_order_type(order_type: str) -> str:
+    if order_type is None:
+        raise ValidationError("Order type is required.")
+    order_type = order_type.strip().upper()
+    if order_type not in VALID_ORDER_TYPES:
+        raise ValidationError(
+            f"Invalid order type '{order_type}'. Must be one of {sorted(VALID_ORDER_TYPES)}."
+        )
+    return order_type
+
+
+def validate_quantity(quantity) -> float:
+    try:
+        quantity = float(quantity)
+    except (TypeError, ValueError):
+        raise ValidationError(f"Quantity must be a number, got '{quantity}'.")
+    if quantity <= 0:
+        raise ValidationError("Quantity must be greater than 0.")
+    return quantity
+
+
+def validate_price(price, order_type: str):
+    """Price is required for LIMIT and STOP_LIMIT orders, must be > 0.
+
+    Returns None for MARKET orders (price is not applicable).
+    """
+    if order_type not in ("LIMIT", "STOP_LIMIT"):
+        return None
+    if price is None:
+        raise ValidationError(f"price is required for {order_type} orders.")
+    try:
+        price = float(price)
+    except (TypeError, ValueError):
+        raise ValidationError(f"price must be a number, got '{price}'.")
+    if price <= 0:
+        raise ValidationError("price must be greater than 0.")
+    return price
+
+
+def validate_stop_price(stop_price, order_type: str):
+    """stop_price is required only for STOP_LIMIT orders, must be > 0."""
+    if order_type != "STOP_LIMIT":
+        return None
+    if stop_price is None:
+        raise ValidationError("stop_price is required for STOP_LIMIT orders.")
+    try:
+        stop_price = float(stop_price)
+    except (TypeError, ValueError):
+        raise ValidationError(f"stop_price must be a number, got '{stop_price}'.")
+    if stop_price <= 0:
+        raise ValidationError("stop_price must be greater than 0.")
+    return stop_price

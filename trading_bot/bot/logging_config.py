@@ -6,31 +6,33 @@ from pathlib import Path
 from datetime import datetime
 
 
-def setup_logging(log_dir: str = "logs") -> logging.Logger:
+def get_logger(name: str) -> logging.Logger:
     """
-    Configure logging for the trading bot.
+    Configure and return a logger instance with file and console handlers.
     
     Args:
-        log_dir: Directory to store log files
+        name: Logger name (typically __name__)
         
     Returns:
         Configured logger instance
     """
-    # Create logs directory if it doesn't exist
-    log_path = Path(log_dir)
-    log_path.mkdir(exist_ok=True)
+    log_dir = Path("logs")
+    log_dir.mkdir(exist_ok=True)
     
-    # Create logger
-    logger = logging.getLogger("trading_bot")
+    logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
     
-    # Log file path with timestamp
-    log_filename = log_path / f"trading_bot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    # Avoid adding handlers multiple times
+    if logger.handlers:
+        return logger
     
-    # File handler
+    # Log file path with timestamp
+    log_filename = log_dir / f"trading_bot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    
+    # File handler with rotation
     file_handler = logging.handlers.RotatingFileHandler(
         log_filename,
-        maxBytes=10485760,  # 10MB
+        maxBytes=2097152,  # 2MB
         backupCount=5
     )
     file_handler.setLevel(logging.DEBUG)

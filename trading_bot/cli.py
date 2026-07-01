@@ -1,185 +1,91 @@
-"""Command Line Interface for the Trading Bot"""
+"""Command-line entry point for the Trading Bot.
 
+Example:
+    python cli.py --symbol BTCUSDT --side BUY --type MARKET --quantity 0.01
+    python cli.py --symbol BTCUSDT --side SELL --type LIMIT --quantity 0.01 --price 60000
+    python cli.py --symbol BTCUSDT --side SELL --type STOP_LIMIT --quantity 0.01 --price 58000 --stop-price 58500
+"""
 import argparse
-import logging
 import sys
 import os
-from typing import Optional
-from trading_bot.bot.logging_config import setup_logging
-from trading_bot.bot.client import BinanceClient, BinanceAPIError
-from trading_bot.bot.orders import OrderExecutor
-from trading_bot.bot.validators import ValidationError
+from dotenv import load_dotenv
+from bot.logging_config import get_logger
+from bot.orders import OrderRequest, OrderService
+from bot.validators import ValidationError
 
-logger = None
+logger = get_logger("cli")
 
 
-def setup_argument_parser() -> argparse.ArgumentParser:
-    """
-    Set up command line argument parser.
-    
-    Returns:
-        Configured ArgumentParser instance
-    """
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Trading Bot for Binance Futures Testnet",
+        prog="trading-bot",
+        description="Place MARKET / LIMIT / STOP_LIMIT orders on Binance Futures Testnet (USDT-M).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Place a MARKET BUY order
-  python -m trading_bot.cli --symbol BTCUSDT --side BUY --type MARKET --quantity 0.001
+  # Market order
+  python cli.py --symbol BTCUSDT --side BUY --type MARKET --quantity 0.01
   
-  # Place a LIMIT SELL order
-  python -m trading_bot.cli --symbol ETHUSDT --side SELL --type LIMIT --quantity 1.0 --price 1500.50
+  # Limit order
+  python cli.py --symbol BTCUSDT --side SELL --type LIMIT --quantity 0.01 --price 61000
+  
+  # Stop-Limit order
+  python cli.py --symbol BTCUSDT --side SELL --type STOP_LIMIT --quantity 0.01 --price 58000 --stop-price 58500
         """
     )
-    
+    parser.add_argument("--symbol", required=True, help="Trading pair, e.g. BTCUSDT")
     parser.add_argument(
-        '--api-key',
-        required=False,
-        help='Binance Futures API Key (or set BINANCE_API_KEY env var)'
+        "--side", required=True, choices=["BUY", "SELL", "buy", "sell"], help="Order side"
     )
     parser.add_argument(
-        '--api-secret',
-        required=False,
-        help='Binance Futures API Secret (or set BINANCE_API_SECRET env var)'
-    )
-    parser.add_argument(
-        '--symbol',
+        "--type",
+        dest="order_type",
         required=True,
-        help='Trading symbol (e.g., BTCUSDT)'
+        choices=["MARKET", "LIMIT", "STOP_LIMIT", "market", "limit", "stop_limit"],
+        help="Order type",
     )
+    parser.add_argument("--quantity", required=True, help="Order quantity")
+    parser.add_argument("--price", help="Required for LIMIT and STOP_LIMIT orders")
     parser.add_argument(
-        '--side',
-        required=True,
-        choices=['BUY', 'SELL'],
-        help='Order side'
+        "--stop-price", dest="stop_price", help="Required for STOP_LIMIT orders"
     )
-    parser.add_argument(
-        '--type',
-        required=True,
-        choices=['MARKET', 'LIMIT'],
-        dest='order_type',
-        help='Order type'
-    )
-    parser.add_argument(
-        '--quantity',
-        required=True,
-        help='Order quantity'
-    )
-    parser.add_argument(
-        '--price',
-        required=False,
-        help='Order price (required for LIMIT orders)'
-    )
-    parser.add_argument(
-        '--log-dir',
-        default='logs',
-        help='Directory for log files (default: logs)'
-    )
-    
     return parser
 
 
-def get_api_credentials(args) -> tuple:
-    """
-    Get API credentials from arguments or environment variables.
-    
-    Args:
-        args: Parsed arguments
-        
-    Returns:
-        Tuple of (api_key, api_secret)
-        
-    Raises:
-        ValueError: If credentials are not provided
-    """
-    api_key = args.api_key or os.getenv('BINANCE_API_KEY')
-    api_secret = args.api_secret or os.getenv('BINANCE_API_SECRET')
-    
-    if not api_key or not api_secret:
-        raise ValueError(
-            "API credentials required. Provide via --api-key/--api-secret "
-            "or BINANCE_API_KEY/BINANCE_API_SECRET environment variables."
-        )
-    
-    return api_key, api_secret
-
-
-def main(argv: Optional[list] = None) -> int:
-    """
-    Main entry point for the CLI.
-    
-    Args:
-        argv: Command line arguments (for testing)
-        
-    Returns:
-        Exit code (0 for success, 1 for failure)
-    """
-    global logger
-    
-    parser = setup_argument_parser()
+def main(argv=None) -> int:
+    load_dotenv()
+    parser = build_parser()
     args = parser.parse_args(argv)
-    
-    logger = setup_logging(args.log_dir)
-    logger.info("="*60)
-    logger.info("Trading Bot Started")
-    logger.info("="*60)
-    
+
     try:
-        api_key, api_secret = get_api_credentials(args)
-        logger.info("API credentials loaded successfully")
-        
-        client = BinanceClient(api_key, api_secret)
-        executor = OrderExecutor(client)
-        
-        logger.info(
-            f"Placing order: {args.side} {args.order_type} "
-            f"{args.quantity} {args.symbol}"
-        )
-        print(f"\nPlacing order...")
-        
-        order_response = executor.validate_and_place_order(
+        order = OrderRequest.build(
             symbol=args.symbol,
             side=args.side,
             order_type=args.order_type,
             quantity=args.quantity,
-            price=args.price
+            price=args.price,
+            stop_price=args.stop_price,
         )
-        
-        formatted_response = OrderExecutor.format_order_response(order_response)
-        print(formatted_response)
-        logger.info(formatted_response)
-        
-        logger.info("Order placement completed successfully")
-        return 0
-        
-    except ValueError as e:
-        error_msg = f"Configuration error: {e}"
-        print(f"\n❌ Error: {error_msg}", file=sys.stderr)
-        if logger:
-            logger.error(error_msg)
+    except ValidationError as exc:
+        print(f"[INPUT ERROR] {exc}")
+        logger.warning("Rejected invalid input: %s", exc)
         return 1
-    except ValidationError as e:
-        error_msg = f"Validation error: {e}"
-        print(f"\n❌ Error: {error_msg}", file=sys.stderr)
-        if logger:
-            logger.error(error_msg)
+
+    print("Order Request Summary:")
+    print(f"  {order.summary()}\n")
+
+    try:
+        service = OrderService()
+        response = service.place_order(order)
+    except Exception as exc:  # surfaces validation, API, and network failures alike
+        print(f"[FAILED] Order could not be placed: {exc}")
+        logger.error("Order failed: %s", exc)
         return 1
-    except BinanceAPIError as e:
-        error_msg = f"API error: {e}"
-        print(f"\n❌ Error: {error_msg}", file=sys.stderr)
-        if logger:
-            logger.error(error_msg)
-        return 1
-    except Exception as e:
-        error_msg = f"Unexpected error: {e}"
-        print(f"\n❌ Error: {error_msg}", file=sys.stderr)
-        if logger:
-            logger.error(error_msg, exc_info=True)
-        return 1
-    finally:
-        if logger:
-            logger.info("Trading Bot Closed")
+
+    print("Order Response:")
+    print(OrderService.format_response(response))
+    print("\n[SUCCESS] Order placed successfully.")
+    return 0
 
 
 if __name__ == "__main__":
