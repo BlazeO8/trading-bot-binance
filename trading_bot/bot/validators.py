@@ -7,7 +7,7 @@ is added later.
 import re
 
 VALID_SIDES = {"BUY", "SELL"}
-VALID_ORDER_TYPES = {"MARKET", "LIMIT", "STOP_LIMIT"}
+VALID_ORDER_TYPES = {"MARKET", "LIMIT", "STOP"}  # Fixed: STOP not STOP_LIMIT
 SYMBOL_PATTERN = re.compile(r"^[A-Z0-9]{5,20}$")
 
 
@@ -39,6 +39,9 @@ def validate_order_type(order_type: str) -> str:
     if order_type is None:
         raise ValidationError("Order type is required.")
     order_type = order_type.strip().upper()
+    # Convert STOP_LIMIT to STOP for API compatibility
+    if order_type == "STOP_LIMIT":
+        order_type = "STOP"
     if order_type not in VALID_ORDER_TYPES:
         raise ValidationError(
             f"Invalid order type '{order_type}'. Must be one of {sorted(VALID_ORDER_TYPES)}."
@@ -57,11 +60,11 @@ def validate_quantity(quantity) -> float:
 
 
 def validate_price(price, order_type: str):
-    """Price is required for LIMIT and STOP_LIMIT orders, must be > 0.
+    """Price is required for LIMIT and STOP orders, must be > 0.
 
     Returns None for MARKET orders (price is not applicable).
     """
-    if order_type not in ("LIMIT", "STOP_LIMIT"):
+    if order_type not in ("LIMIT", "STOP"):
         return None
     if price is None:
         raise ValidationError(f"price is required for {order_type} orders.")
@@ -75,11 +78,11 @@ def validate_price(price, order_type: str):
 
 
 def validate_stop_price(stop_price, order_type: str):
-    """stop_price is required only for STOP_LIMIT orders, must be > 0."""
-    if order_type != "STOP_LIMIT":
+    """stop_price is required only for STOP orders, must be > 0."""
+    if order_type != "STOP":
         return None
     if stop_price is None:
-        raise ValidationError("stop_price is required for STOP_LIMIT orders.")
+        raise ValidationError("stop_price is required for STOP orders.")
     try:
         stop_price = float(stop_price)
     except (TypeError, ValueError):
