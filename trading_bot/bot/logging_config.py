@@ -22,7 +22,7 @@ def get_logger(name: str) -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
     
-    # Avoid adding handlers multiple times
+    # Avoid adding handlers multiple times (check for handlers on this logger)
     if logger.handlers:
         return logger
     
@@ -52,5 +52,8 @@ def get_logger(name: str) -> logging.Logger:
     # Add handlers to logger
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
+    
+    # Prevent propagation to root logger (avoid duplicate logs)
+    logger.propagate = False
     
     return logger
