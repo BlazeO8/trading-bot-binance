@@ -3,7 +3,7 @@
 Example:
     python cli.py --symbol BTCUSDT --side BUY --type MARKET --quantity 0.01
     python cli.py --symbol BTCUSDT --side SELL --type LIMIT --quantity 0.01 --price 60000
-    python cli.py --symbol BTCUSDT --side SELL --type STOP_LIMIT --quantity 0.01 --price 58000 --stop-price 58500
+    python cli.py --symbol BTCUSDT --side SELL --type STOP --quantity 0.01 --price 58000 --stop-price 58500
 """
 import argparse
 import sys
@@ -19,7 +19,7 @@ logger = get_logger("cli")
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="trading-bot",
-        description="Place MARKET / LIMIT / STOP_LIMIT orders on Binance Futures Testnet (USDT-M).",
+        description="Place MARKET / LIMIT / STOP orders on Binance Futures Testnet (USDT-M).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -29,8 +29,8 @@ Examples:
   # Limit order
   python cli.py --symbol BTCUSDT --side SELL --type LIMIT --quantity 0.01 --price 61000
   
-  # Stop-Limit order
-  python cli.py --symbol BTCUSDT --side SELL --type STOP_LIMIT --quantity 0.01 --price 58000 --stop-price 58500
+  # Stop order (formerly Stop-Limit)
+  python cli.py --symbol BTCUSDT --side SELL --type STOP --quantity 0.01 --price 58000 --stop-price 58500
         """
     )
     parser.add_argument("--symbol", required=True, help="Trading pair, e.g. BTCUSDT")
@@ -41,13 +41,13 @@ Examples:
         "--type",
         dest="order_type",
         required=True,
-        choices=["MARKET", "LIMIT", "STOP_LIMIT", "market", "limit", "stop_limit"],
+        choices=["MARKET", "LIMIT", "STOP", "STOP_LIMIT", "market", "limit", "stop", "stop_limit"],
         help="Order type",
     )
     parser.add_argument("--quantity", required=True, help="Order quantity")
-    parser.add_argument("--price", help="Required for LIMIT and STOP_LIMIT orders")
+    parser.add_argument("--price", help="Required for LIMIT and STOP orders")
     parser.add_argument(
-        "--stop-price", dest="stop_price", help="Required for STOP_LIMIT orders"
+        "--stop-price", dest="stop_price", help="Required for STOP orders"
     )
     return parser
 
